@@ -26,6 +26,18 @@
 			bindings = <&bt BT_SEL 0>, <&goto_esb>;
 			tapping-term-ms = <400>;
 		};
+
+		// AJ: top-left button, tap = Studio Unlock (was Enter), hold = Snipe layer.
+		// Switches keep dying; this keeps an unlock key on the base layer.
+		ltsu: layer-tap-studio-unlock {
+			compatible = "zmk,behavior-hold-tap";
+			display-name = "Hold: layer, tap: Studio Unlock";
+			#binding-cells = <2>;
+			flavor = "tap-preferred";
+			tapping-term-ms = <200>;
+			bindings = <&mo>, <&studio_unlock>;
+			hold-while-undecided;
+		};
 	};
 
 	keymap {
@@ -36,7 +48,7 @@
 			DECLARE_ENCODERS;
 			bindings = <
 			    // buttons
-			    &ltmkp LAYER_SNIPE ENTER  &ltmkp LAYER_SCROLL ESC
+			    &ltsu LAYER_SNIPE 0       &ltmkp LAYER_SCROLL ESC
 			    &mkp MCLK                 &cdch LAYER_SCROLL 0
 			    &mkp LCLK                 &mkp RCLK
 			    &ltm LAYER_EXTRAS MB4     &ltm LAYER_DEVICE MB5
