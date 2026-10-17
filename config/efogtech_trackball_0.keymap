@@ -42,7 +42,7 @@
 			bindings = <
 			    &bst_copy      &bst_paste
 			    &bst_cut       &bst_undo
-			    &bst_undo      &bst_copy
+			    &mui_or_dgl    &studio_unlock  // AJ: MB5 dead, so Device-layer keys live here (hold MB4)
 			    &trans         &bst_paste
 
 			    &kp C_VOL_UP   &kp LC(TAB)
