@@ -17,6 +17,17 @@
 #endif
 
 / {
+	behaviors {
+		// AJ: one tap = leave dongle (BLE profile 0, USB when plugged in), double tap = dongle
+		usb_or_dgl: usb-or-dongle {
+			compatible = "zmk,behavior-tap-dance";
+			display-name = "Leave dongle (click) or switch to dongle (double-click)";
+			#binding-cells = <0>;
+			bindings = <&bt BT_SEL 0>, <&goto_esb>;
+			tapping-term-ms = <400>;
+		};
+	};
+
 	keymap {
 		compatible = "zmk,keymap";
 
@@ -42,7 +53,7 @@
 			bindings = <
 			    &bst_copy      &bst_paste
 			    &bst_cut       &bst_undo
-			    &mui_or_dgl    &studio_unlock  // AJ: MB5 dead, so Device-layer keys live here (hold MB4)
+			    &usb_or_dgl    &studio_unlock  // AJ: MB5 dead, so Device-layer keys live here (hold MB4)
 			    &trans         &bst_paste
 
 			    &kp C_VOL_UP   &kp LC(TAB)
