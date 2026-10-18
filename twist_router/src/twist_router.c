@@ -52,11 +52,6 @@ static const char *const action_names[MODE_COUNT][5] = {
     {"scroll", "reverse", "hscroll", "keys", "block"},
     {"speed", "axis", "invert", "scroll", "block"},
 };
-/* Number of args each action takes. */
-static const uint8_t action_argc[MODE_COUNT][5] = {
-    {1, 1, 2, 3, 0},
-    {1, 1, 2, 1, 0},
-};
 static const char *const mode_prefix[MODE_COUNT] = {"twr", "crr"};
 static const char *const mods_mode_names[] = {"any", "all", "none"};
 static const char *const locks_mode_names[] = {"on", "off"};
@@ -407,11 +402,6 @@ static bool usage_ok(uint32_t u) {
     return u == 0 || page == HID_USAGE_KEY || page == HID_USAGE_CONSUMER;
 }
 
-#define ERR(...)                                                                                   \
-    do {                                                                                           \
-        shell_print(sh, "error: " __VA_ARGS__);                                                    \
-        return -EINVAL;                                                                            \
-    } while (0)
 
 static int rule_list(const struct shell *sh, uint8_t mode) {
     int n = 0;
@@ -425,105 +415,103 @@ static int rule_list(const struct shell *sh, uint8_t mode) {
     return 0;
 }
 
+/* Arg kinds per action: P = pct 1-1000, S = step 1-1000, B = 0|1, U = keycode or 0. */
+static const char *const action_args[MODE_COUNT][5] = {
+    {"P", "P", "PB", "UUS", ""},
+    {"P", "B", "BB", "P", ""},
+};
+
+static const char *parse_rule(uint8_t mode, size_t argc, char **argv, struct twr_rule *r) {
+    unsigned long v;
+    char *end;
+
+    if (argc < 8) {
+        return "too few args";
+    }
+    if (!parse_ul(argv[2], 16, &v) || v > 0xFF) {
+        return "mods must be hex 00-ff";
+    }
+    r->mods = v;
+    const int mm = lookup(mods_mode_names, ARRAY_SIZE(mods_mode_names), argv[3]);
+    if (mm < 0) {
+        return "mods mode must be any|all|none";
+    }
+    r->mods_mode = mm;
+    if (!parse_ul(argv[4], 0, &v) || v > 7) {
+        return "locks must be 0-7";
+    }
+    r->locks = v;
+    const int lm = lookup(locks_mode_names, ARRAY_SIZE(locks_mode_names), argv[5]);
+    if (lm < 0) {
+        return "locks mode must be on|off";
+    }
+    r->locks_mode = lm;
+    const long layer = strtol(argv[6], &end, 10);
+    if (end == argv[6] || *end != '\0' || layer < -1 || layer >= ZMK_KEYMAP_LAYERS_LEN) {
+        return "bad layer";
+    }
+    r->layer = (int8_t)layer;
+    const int act = lookup(action_names[mode], 5, argv[7]);
+    if (act < 0) {
+        return "bad action";
+    }
+    r->action = act;
+
+    const char *kinds = action_args[mode][act];
+    if (argc - 8 != strlen(kinds)) {
+        return "wrong arg count";
+    }
+    for (size_t i = 0; kinds[i]; i++) {
+        if (!parse_ul(argv[8 + i], 0, &v) || v > UINT32_MAX) {
+            return "bad number";
+        }
+        switch (kinds[i]) {
+        case 'P':
+        case 'S':
+            if (v < 1 || v > 1000) {
+                return kinds[i] == 'P' ? "pct must be 1-1000" : "step must be 1-1000";
+            }
+            break;
+        case 'B':
+            if (v > 1) {
+                return "flag must be 0|1";
+            }
+            break;
+        case 'U':
+            if (!usage_ok(v)) {
+                return "bad keycode";
+            }
+            break;
+        }
+        r->a[i] = (uint32_t)v;
+    }
+    return NULL;
+}
+
 /* argv[0]="set", then: idx mods mods_mode locks locks_mode layer action [a1] [a2] [a3] */
 static int rule_set(const struct shell *sh, uint8_t mode, size_t argc, char **argv) {
-    if (argc < 8) {
-        ERR("too few args");
-    }
-
-    const int idx = parse_idx(sh, argv[1]);
+    const int idx = parse_idx(sh, argc > 1 ? argv[1] : "");
     if (idx < 0) {
         return -EINVAL;
     }
-
     struct twr_rule r = {.used = 1};
-    unsigned long v;
-
-    if (!parse_ul(argv[2], 16, &v) || v > 0xFF) {
-        ERR("mods must be hex 00-ff");
+    const char *err = parse_rule(mode, argc, argv, &r);
+    if (err) {
+        shell_print(sh, "error: %s", err);
+        return -EINVAL;
     }
-    r.mods = v;
-
-    const int mm = lookup(mods_mode_names, ARRAY_SIZE(mods_mode_names), argv[3]);
-    if (mm < 0) {
-        ERR("mods mode must be any|all|none");
-    }
-    r.mods_mode = mm;
-
-    if (!parse_ul(argv[4], 0, &v) || v > 7) {
-        ERR("locks must be 0-7");
-    }
-    r.locks = v;
-
-    const int lm = lookup(locks_mode_names, ARRAY_SIZE(locks_mode_names), argv[5]);
-    if (lm < 0) {
-        ERR("locks mode must be on|off");
-    }
-    r.locks_mode = lm;
-
-    char *end;
-    const long layer = strtol(argv[6], &end, 10);
-    if (end == argv[6] || *end != '\0' || layer < -1 || layer >= ZMK_KEYMAP_LAYERS_LEN) {
-        ERR("layer must be -1..%d", ZMK_KEYMAP_LAYERS_LEN - 1);
-    }
-    r.layer = (int8_t)layer;
-
-    const int act = lookup(action_names[mode], 5, argv[7]);
-    if (act < 0) {
-        ERR("action must be %s", mode == MODE_TWIST ? "scroll|reverse|hscroll|keys|block"
-                                                    : "speed|axis|invert|scroll|block");
-    }
-    r.action = act;
-
-    const size_t nargs = argc - 8;
-    if (nargs != action_argc[mode][act]) {
-        ERR("%s takes %d arg(s)", argv[7], action_argc[mode][act]);
-    }
-    for (size_t i = 0; i < nargs; i++) {
-        if (!parse_ul(argv[8 + i], 0, &v) || v > UINT32_MAX) {
-            ERR("bad number '%s'", argv[8 + i]);
-        }
-        r.a[i] = (uint32_t)v;
-    }
-
-    /* Per-action range checks. */
-    const bool pct_first = (mode == MODE_TWIST && act != TA_KEYS && act != TA_BLOCK) ||
-                           (mode == MODE_CURSOR && (act == CA_SPEED || act == CA_SCROLL));
-    if (pct_first && (r.a[0] < 1 || r.a[0] > 1000)) {
-        ERR("pct must be 1-1000");
-    }
-    if (mode == MODE_TWIST && act == TA_HSCROLL && r.a[1] > 1) {
-        ERR("rev must be 0|1");
-    }
-    if (mode == MODE_TWIST && act == TA_KEYS) {
-        if (!usage_ok(r.a[0]) || !usage_ok(r.a[1])) {
-            ERR("bad usage");
-        }
-        if (r.a[2] < 1 || r.a[2] > 1000) {
-            ERR("step must be 1-1000");
-        }
-    }
-    if (mode == MODE_CURSOR && act == CA_AXIS && r.a[0] > 1) {
-        ERR("axis must be 0|1");
-    }
-    if (mode == MODE_CURSOR && act == CA_INVERT && (r.a[0] > 1 || r.a[1] > 1)) {
-        ERR("invert must be 0|1");
-    }
-
     rules[mode][idx] = r;
     const int rc = save_rule(mode, idx);
     if (rc < 0) {
-        ERR("save failed %d", rc);
+        shell_print(sh, "error: save failed %d", rc);
+        return rc;
     }
     print_rule(sh, mode, idx);
     return 0;
 }
 
 static int rule_del(const struct shell *sh, uint8_t mode, size_t argc, char **argv) {
-    if (argc != 2) {
-        ERR("usage: del <idx>");
-    }
-    const int idx = parse_idx(sh, argv[1]);
+    const int idx = parse_idx(sh, argc > 1 ? argv[1] : "");
     if (idx < 0) {
         return -EINVAL;
     }
@@ -574,13 +562,13 @@ static int rule_test(const struct shell *sh, uint8_t mode) {
         return rule_test(sh, mode);                                                                \
     }                                                                                              \
     SHELL_STATIC_SUBCMD_SET_CREATE(sub_##name##_rule,                                              \
-                                   SHELL_CMD(list, NULL, "List rules", cmd_##name##_list),         \
-                                   SHELL_CMD(set, NULL, "Set a rule", cmd_##name##_set),           \
-                                   SHELL_CMD(del, NULL, "Delete a rule", cmd_##name##_del),        \
-                                   SHELL_CMD(clear, NULL, "Delete all rules", cmd_##name##_clear), \
-                                   SHELL_CMD(test, NULL, "Show state and match", cmd_##name##_test), \
+                                   SHELL_CMD(list, NULL, NULL, cmd_##name##_list),         \
+                                   SHELL_CMD(set, NULL, NULL, cmd_##name##_set),           \
+                                   SHELL_CMD(del, NULL, NULL, cmd_##name##_del),        \
+                                   SHELL_CMD(clear, NULL, NULL, cmd_##name##_clear), \
+                                   SHELL_CMD(test, NULL, NULL, cmd_##name##_test), \
                                    SHELL_SUBCMD_SET_END);                                          \
-    SHELL_STATIC_SUBCMD_SET_CREATE(sub_##name, SHELL_CMD(rule, &sub_##name##_rule, "Rules", NULL), \
+    SHELL_STATIC_SUBCMD_SET_CREATE(sub_##name, SHELL_CMD(rule, &sub_##name##_rule, NULL, NULL), \
                                    SHELL_SUBCMD_SET_END);                                          \
     SHELL_CMD_REGISTER(name, &sub_##name, #name " router", NULL);
 
