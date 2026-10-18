@@ -118,14 +118,6 @@ static bool rule_matches(const struct twr_rule *r, uint8_t mods, uint8_t locks) 
 }
 
 static int find_match(uint8_t mode) {
-    bool any = false;
-    for (int i = 0; i < TWR_MAX_RULES; i++) {
-        any |= rules[mode][i].used;
-    }
-    if (!any) {
-        return -1;
-    }
-
     const uint8_t mods = zmk_hid_get_explicit_mods();
     const uint8_t locks = locks_now();
     for (int i = 0; i < TWR_MAX_RULES; i++) {
@@ -355,13 +347,13 @@ static int save_rule(uint8_t mode, int idx) {
 
 static void print_rule(const struct shell *sh, uint8_t mode, int idx) {
     const struct twr_rule *r = &rules[mode][idx];
-    const bool hex = mode == MODE_TWIST && r->action == TA_KEYS;
-    char a0[12], a1[12];
-    snprintf(a0, sizeof(a0), hex ? "0x%x" : "%u", r->a[0]);
-    snprintf(a1, sizeof(a1), hex ? "0x%x" : "%u", r->a[1]);
-    shell_print(sh, "R %d 0x%02x %s %u %s %d %s %s %s %u", idx, r->mods,
-                mods_mode_names[r->mods_mode], r->locks, locks_mode_names[r->locks_mode], r->layer,
-                action_names[mode][r->action], a0, a1, r->a[2]);
+    /* keys usages print as hex (0x...), everything else decimal */
+    shell_fprintf(sh, SHELL_NORMAL,
+                  mode == MODE_TWIST && r->action == TA_KEYS ? "R %d 0x%02x %s %u %s %d %s 0x%x 0x%x %u\n"
+                                                             : "R %d 0x%02x %s %u %s %d %s %u %u %u\n",
+                idx, r->mods, mods_mode_names[r->mods_mode], r->locks,
+                locks_mode_names[r->locks_mode], r->layer, action_names[mode][r->action], r->a[0],
+                r->a[1], r->a[2]);
 }
 
 static bool parse_ul(const char *s, int base, unsigned long *out) {
