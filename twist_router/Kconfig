@@ -1,0 +1,17 @@
+config ZMK_TWIST_ROUTER
+	bool "Twist router: per mods/locks/layer rules for twist scroll"
+	default y
+	depends on DT_HAS_ZMK_INPUT_PROCESSOR_TWIST_ROUTER_ENABLED
+	select ZMK_HID_INDICATORS
+
+if ZMK_TWIST_ROUTER
+
+config ZMK_TWIST_ROUTER_TAP_MS
+	int "Key press/release spacing for the keys action (ms)"
+	default 10
+
+config ZMK_TWIST_ROUTER_MAX_PENDING_TAPS
+	int "Max queued key taps per direction (extra twist is dropped)"
+	default 8
+
+endif

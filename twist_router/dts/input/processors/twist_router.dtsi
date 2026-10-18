@@ -1,0 +1,13 @@
+/ {
+    /omit-if-no-ref/ zip_twist_router: zip_twist_router {
+        compatible = "zmk,input-processor-twist-router";
+        #input-processor-cells = <0>;
+        mode = <0>;
+    };
+
+    /omit-if-no-ref/ zip_cursor_router: zip_cursor_router {
+        compatible = "zmk,input-processor-twist-router";
+        #input-processor-cells = <0>;
+        mode = <1>;
+    };
+};

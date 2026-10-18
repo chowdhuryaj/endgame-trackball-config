@@ -1,0 +1,9 @@
+description: Routes twist wheel events through runtime rules (mods / lock LEDs / layer)
+compatible: "zmk,input-processor-twist-router"
+include: ip_zero_param.yaml
+
+properties:
+  mode:
+    type: int
+    required: true
+    description: 0 = twist (acts on REL_WHEEL), 1 = cursor (acts on REL_X/REL_Y)

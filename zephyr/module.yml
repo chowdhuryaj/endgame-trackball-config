@@ -1,4 +1,7 @@
 name: efogtech-trackball
 build:
+  cmake: twist_router
+  kconfig: twist_router/Kconfig
   settings:
     board_root: .
+    dts_root: twist_router
