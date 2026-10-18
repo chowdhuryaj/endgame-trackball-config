@@ -13,7 +13,7 @@
  * out of the drag-scroll layer chain.
  *
  * Rules persist as settings "twr/<idx>" (twist) and "crr/<idx>" (cursor).
- * Shell: twist rule ..., cursor rule ..., mods host <hex>.
+ * Shell: twist rule ..., cursor rule ...
  */
 
 #define DT_DRV_COMPAT zmk_input_processor_twist_router
@@ -39,7 +39,6 @@
 LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
 
 #define TWR_MAX_RULES 8
-#define HOST_MODS_TTL_MS 1500
 
 enum { MODE_TWIST = 0, MODE_CURSOR = 1, MODE_COUNT };
 enum { MODS_ANY = 0, MODS_ALL, MODS_NONE };
@@ -88,18 +87,12 @@ struct twr_state {
 };
 static struct twr_state states[MODE_COUNT];
 
-static uint8_t host_mods;
-static uint32_t host_mods_at;
 
 struct twr_config {
     uint8_t mode;
 };
 
 /* ---------- conditions ---------- */
-
-static uint8_t host_mods_now(void) {
-    return (k_uptime_get_32() - host_mods_at) < HOST_MODS_TTL_MS ? host_mods : 0;
-}
 
 static uint8_t locks_now(void) { return (uint8_t)zmk_hid_indicators_get_current_profile(); }
 
@@ -138,7 +131,7 @@ static int find_match(uint8_t mode) {
         return -1;
     }
 
-    const uint8_t mods = zmk_hid_get_explicit_mods() | host_mods_now();
+    const uint8_t mods = zmk_hid_get_explicit_mods();
     const uint8_t locks = locks_now();
     for (int i = 0; i < TWR_MAX_RULES; i++) {
         if (rules[mode][i].used && rule_matches(&rules[mode][i], mods, locks)) {
@@ -435,8 +428,7 @@ static int rule_list(const struct shell *sh, uint8_t mode) {
 /* argv[0]="set", then: idx mods mods_mode locks locks_mode layer action [a1] [a2] [a3] */
 static int rule_set(const struct shell *sh, uint8_t mode, size_t argc, char **argv) {
     if (argc < 8) {
-        ERR("usage: set <idx> <mods_hex> <any|all|none> <locks_mask> <on|off> <layer> <action> "
-            "[a1] [a2] [a3]");
+        ERR("too few args");
     }
 
     const int idx = parse_idx(sh, argv[1]);
@@ -459,7 +451,7 @@ static int rule_set(const struct shell *sh, uint8_t mode, size_t argc, char **ar
     r.mods_mode = mm;
 
     if (!parse_ul(argv[4], 0, &v) || v > 7) {
-        ERR("locks mask must be 0-7 (num=1 caps=2 scroll=4)");
+        ERR("locks must be 0-7");
     }
     r.locks = v;
 
@@ -505,23 +497,23 @@ static int rule_set(const struct shell *sh, uint8_t mode, size_t argc, char **ar
     }
     if (mode == MODE_TWIST && act == TA_KEYS) {
         if (!usage_ok(r.a[0]) || !usage_ok(r.a[1])) {
-            ERR("usage must be a keyboard (0x07) or consumer (0x0c) page keycode, or 0");
+            ERR("bad usage");
         }
         if (r.a[2] < 1 || r.a[2] > 1000) {
             ERR("step must be 1-1000");
         }
     }
     if (mode == MODE_CURSOR && act == CA_AXIS && r.a[0] > 1) {
-        ERR("axis must be 0 (horizontal) or 1 (vertical)");
+        ERR("axis must be 0|1");
     }
     if (mode == MODE_CURSOR && act == CA_INVERT && (r.a[0] > 1 || r.a[1] > 1)) {
-        ERR("invert flags must be 0|1");
+        ERR("invert must be 0|1");
     }
 
     rules[mode][idx] = r;
     const int rc = save_rule(mode, idx);
     if (rc < 0) {
-        ERR("settings save failed (%d)", rc);
+        ERR("save failed %d", rc);
     }
     print_rule(sh, mode, idx);
     return 0;
@@ -555,12 +547,12 @@ static int rule_clear(const struct shell *sh, uint8_t mode) {
 static int rule_test(const struct shell *sh, uint8_t mode) {
     const int idx = find_match(mode);
     const zmk_keymap_layer_id_t top = zmk_keymap_layer_index_to_id(zmk_keymap_highest_layer_active());
-    char m[4] = "";
+    char m[12] = "";
     if (idx >= 0) {
         snprintf(m, sizeof(m), "%d", idx);
     }
-    shell_print(sh, "mods=0x%02x host=0x%02x locks=0x%02x layer=%d match=%s",
-                zmk_hid_get_explicit_mods(), host_mods_now(), locks_now(), top,
+    shell_print(sh, "mods=0x%02x locks=0x%02x layer=%d match=%s", zmk_hid_get_explicit_mods(),
+                locks_now(), top,
                 idx >= 0 ? m : "none");
     return 0;
 }
@@ -594,20 +586,5 @@ static int rule_test(const struct shell *sh, uint8_t mode) {
 
 MODE_CMDS(twist, MODE_TWIST)
 MODE_CMDS(cursor, MODE_CURSOR)
-
-/* mods host <hex>: keyboard modifiers forwarded by a host helper; expires after 1.5 s. */
-static int cmd_mods_host(const struct shell *sh, size_t argc, char **argv) {
-    unsigned long v;
-    if (argc != 2 || !parse_ul(argv[1], 16, &v) || v > 0xFF) {
-        ERR("usage: mods host <hex 00-ff>");
-    }
-    host_mods = (uint8_t)v;
-    host_mods_at = k_uptime_get_32();
-    shell_print(sh, "ok");
-    return 0;
-}
-SHELL_STATIC_SUBCMD_SET_CREATE(sub_mods, SHELL_CMD(host, NULL, "Set host modifiers", cmd_mods_host),
-                               SHELL_SUBCMD_SET_END);
-SHELL_CMD_REGISTER(mods, &sub_mods, "Host modifier state for router rules", NULL);
 
 #endif /* CONFIG_SHELL */
