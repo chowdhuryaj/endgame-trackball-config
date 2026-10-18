@@ -147,7 +147,9 @@
 
 		snipe {
 			layers = <LAYER_SNIPE>;
-			input-processors = <&zip_twist_router>, <&zip_cursor_router>, <&zip_bistable_snipe_scaler>, <&zip_rotate_pointer>,
+			// AJ: twist on Snipe = normal twist scaling x the snipe ratio (snipe scaler also covers wheel codes)
+			input-processors = <&zip_bistable_twist_scaler>, <&zip_twist_router>, <&zip_cursor_router>,
+							   <&zip_bistable_snipe_scaler>, <&zip_rotate_pointer>,
 							   <&esb_ip>, <&zip_ble_report_rate_limit>;
 		};
 	};

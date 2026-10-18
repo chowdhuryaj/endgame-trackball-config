@@ -80,7 +80,7 @@ struct twr_state {
     int32_t rem[2];  /* scaling remainders, x100 units: [0]=X/HWHEEL, [1]=Y/WHEEL */
     int32_t key_acc; /* twist keys: accumulated wheel units */
 };
-static struct twr_state states[MODE_COUNT];
+static struct twr_state states[MODE_COUNT] = {{.last_rule = -1}, {.last_rule = -1}};
 
 
 struct twr_config {
@@ -304,16 +304,10 @@ static const struct zmk_input_processor_driver_api twr_api = {
     .handle_event = twr_handle_event,
 };
 
-static int twr_init(const struct device *dev) {
-    const struct twr_config *cfg = dev->config;
-    states[cfg->mode].last_rule = -1;
-    return 0;
-}
-
 #define TWR_INST(n)                                                                                \
     BUILD_ASSERT(DT_INST_PROP(n, mode) < MODE_COUNT, "twist-router: mode must be 0 or 1");          \
     static const struct twr_config twr_config_##n = {.mode = DT_INST_PROP(n, mode)};               \
-    DEVICE_DT_INST_DEFINE(n, twr_init, NULL, NULL, &twr_config_##n, POST_KERNEL,                    \
+    DEVICE_DT_INST_DEFINE(n, NULL, NULL, NULL, &twr_config_##n, POST_KERNEL,                    \
                           CONFIG_KERNEL_INIT_PRIORITY_DEFAULT, &twr_api);
 
 DT_INST_FOREACH_STATUS_OKAY(TWR_INST)
@@ -429,21 +423,21 @@ static const char *parse_rule(uint8_t mode, size_t argc, char **argv, struct twr
         return "too few args";
     }
     if (!parse_ul(argv[2], 16, &v) || v > 0xFF) {
-        return "mods must be hex 00-ff";
+        return "bad mods";
     }
     r->mods = v;
     const int mm = lookup(mods_mode_names, ARRAY_SIZE(mods_mode_names), argv[3]);
     if (mm < 0) {
-        return "mods mode must be any|all|none";
+        return "bad mods mode";
     }
     r->mods_mode = mm;
     if (!parse_ul(argv[4], 0, &v) || v > 7) {
-        return "locks must be 0-7";
+        return "bad locks";
     }
     r->locks = v;
     const int lm = lookup(locks_mode_names, ARRAY_SIZE(locks_mode_names), argv[5]);
     if (lm < 0) {
-        return "locks mode must be on|off";
+        return "bad locks mode";
     }
     r->locks_mode = lm;
     const long layer = strtol(argv[6], &end, 10);
@@ -469,7 +463,7 @@ static const char *parse_rule(uint8_t mode, size_t argc, char **argv, struct twr
         case 'P':
         case 'S':
             if (v < 1 || v > 1000) {
-                return kinds[i] == 'P' ? "pct must be 1-1000" : "step must be 1-1000";
+                return "pct/step must be 1-1000";
             }
             break;
         case 'B':

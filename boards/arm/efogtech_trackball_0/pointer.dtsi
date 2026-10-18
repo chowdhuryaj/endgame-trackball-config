@@ -43,7 +43,7 @@
 		compatible = "zmk,input-processor-bistable-scaler";
 		#input-processor-cells = <0>;
 		type = <INPUT_EV_REL>;
-		codes = <INPUT_REL_X INPUT_REL_Y>;
+		codes = <INPUT_REL_X INPUT_REL_Y INPUT_REL_WHEEL INPUT_REL_HWHEEL>; // AJ: wheel too, so twist on Snipe scales by the same ratio
 		track-remainders;
 		default-coef = <ZBS_SCALE(1, 4)>;
 		slot0 = <ZBS_RUNTIME>;
